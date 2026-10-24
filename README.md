@@ -2,7 +2,7 @@
 
 **A local-first control room for ASIC mining fleets.**
 
-ASIC Pulse is a standalone Windows desktop application for discovering, monitoring, and managing ASIC miners on a local network. It brings subnet scanning, live fleet telemetry, batch pool and power configuration, board-level diagnostics, firmware rollout, and Bitcoin profitability analytics into one workspace — without a cloud account, an external dashboard, or an agent installed on the miners.
+ASIC Pulse is a standalone Windows desktop application for discovering, monitoring, and managing ASIC miners on a local network. It brings subnet scanning, live fleet telemetry, batch pool and power configuration, board-level diagnostics, firmware workflow, and Bitcoin profitability analytics into one workspace — without a cloud account, an external dashboard, or an agent installed on the miners.
 
 [English](#english) · [Русский](#russian)
 
@@ -15,7 +15,7 @@ ASIC Pulse is a standalone Windows desktop application for discovering, monitori
 
 ASIC Pulse is built for people who run miners on their own network. Point it at one or more IPv4 segments; it probes every address, identifies compatible devices, and builds a live inventory of the fleet. From that inventory you can inspect individual boards, compare real-time and average hashrate, change pools and worker names in bulk, switch power profiles, tune frequency and voltage, reboot or blink selected devices, and run a firmware workflow — all from one window.
 
-The application is deliberately local. It talks directly to miners over TCP port 4028 and their HTTP CGI endpoints. There is no account, no cloud relay, no external monitoring agent, and no telemetry upload. The only optional internet request is to mempool.space for live Bitcoin network statistics.
+The application is deliberately local. It talks directly to miners over TCP port 4028 and their HTTP CGI endpoints. There is no account, no cloud relay, no external monitoring agent, and no telemetry upload. The only optional fleet-related request is to mempool.space for live Bitcoin network statistics. The interface also loads its display and icon fonts from Google Fonts; if those requests are blocked, the layout falls back to local fonts.
 
 ASIC Pulse is designed for mixed, real-world fleets. Antminer, WhatsMiner, and Avalon devices can sit in the same table; the app normalizes what each device exposes into a common inventory while keeping vendor-specific controls available where the firmware supports them.
 
@@ -80,13 +80,13 @@ Scanning is parallel and bounded by a semaphore:
 - **Live progress:** the scanner reports how many addresses have been checked and how many ASIC devices have been found.
 - **Cancellation:** an in-progress scan can be stopped without closing the app.
 
-For every address, ASIC Pulse first sends a combined `summary+pools+stats+version` request to the CGMiner/BMMiner API on port 4028, then retries with `summary` if needed. If the API does not answer, it falls back to the HTTP Digest CGI interface used by many Antminer and Avalon web panels.
+For every address, ASIC Pulse first sends a combined `summary+pools+stats+version` request to the CGMiner/BMMiner API on port 4028, then retries with `summary` if needed. If the API does not answer, it falls back to the HTTP Digest CGI interface used by many Antminer web panels.
 
 The resulting inventory can include model, real-time and average hashrate, temperatures, fan speed, uptime, active pools and workers, hardware errors, rejection rate, firmware string, MAC address, voltage, frequency, power draw, and per-board chip telemetry when the device exposes it.
 
 Two table options keep large scans manageable:
 
-- **Only found miners** hides unreachable rows while a status filter is active.
+- **Only found miners** hides offline rows unless the Offline filter is selected.
 - **Show pools 2/3** adds the secondary and tertiary pool/worker columns.
 
 #### Fleet table
@@ -174,7 +174,7 @@ Manual control adds:
 - **Frequency:** 100 to 1500 MHz.
 - **Voltage:** optional, in volts.
 
-When manual frequency is enabled, ASIC Pulse applies the working mode and then the frequency/voltage step. For Antminer it reads the current configuration and writes it back with the new frequency so pools and unrelated settings are not discarded. For WhatsMiner it uses the `set.miner.freq` command on port 4028. For Avalon and other CGMiner-compatible devices it falls back to the `ascset` command.
+When manual frequency is enabled, ASIC Pulse applies the working mode and then the frequency/voltage step. For Antminer it reads the current configuration and writes it back with the new frequency so pools and unrelated settings are not discarded. For WhatsMiner it uses the `set.miner.freq` command on port 4028. For Avalon and other CGMiner-compatible devices it falls back to the `ascset` command. Voltage is written through the Antminer configuration path; other vendors may ignore it.
 
 Frequency and voltage control depends on the model and firmware. Stock vendor firmware may ignore these fields; custom firmware and supported WhatsMiner/Avalon builds are more likely to accept them. Use vendor specifications and change one miner first.
 
@@ -286,7 +286,7 @@ ASIC Pulse does not use a database. Fleet data and charts exist for the current 
 |---|---|---|
 | **Antminer** (including legacy S7/S9/T9 and newer S19/S21/T21 families) | Port 4028 CGMiner API and HTTP Digest CGI fallback | Pool/worker configuration, power modes, frequency/voltage, reboot, LED locate, firmware endpoint |
 | **WhatsMiner** M-series | Port 4028 CGMiner-compatible API | Discovery and telemetry; frequency through `set.miner.freq`; other operations depend on the exposed vendor interface |
-| **Avalon** A6/A7/A8 | Port 4028 and HTTP CGI fallback | Discovery and telemetry; frequency through `ascset`; reboot through the port 4028 `restart` fallback; other operations depend on firmware |
+| **Avalon** A6/A7/A8 | Port 4028; CGI where supported | Discovery and telemetry; frequency through `ascset`; reboot through the port 4028 `restart` fallback; other operations depend on firmware |
 | **Other CGMiner-compatible ASIC** | Port 4028 `summary`/`pools`/`stats`/`version` | Discovery and monitoring; frequency may work through the `ascset` fallback |
 
 Vendor APIs differ by model and firmware. Treat this matrix as a guide, not a guarantee. The app reports acknowledged operations, but it cannot make a device support an endpoint it does not expose.
@@ -308,7 +308,7 @@ Use the **Demo Rig / Live Network** control in the top bar to switch modes. Swit
 ### Privacy and security
 
 - **No account and no cloud.** ASIC Pulse does not require a login, does not upload fleet data, and does not include analytics or telemetry.
-- **One optional outbound service.** The Tools screen requests public Bitcoin statistics from mempool.space. No miner data is sent with those requests.
+- **Limited outbound requests.** The Tools screen requests public Bitcoin statistics from mempool.space. The interface also loads web fonts and icon fonts from Google Fonts. Neither request includes miner data, but both disclose the machine's IP address to the respective service. Block them at the firewall if that is not acceptable; the app remains usable with fallback fonts and offline Bitcoin data.
 - **Local credentials.** Miner usernames and passwords are stored in the local TOML configuration in plain text. Protect the Windows account and the machine; use a dedicated operator account where possible.
 - **Local HTTP.** Miner CGI endpoints are contacted over plain HTTP on the local network. There is no TLS or certificate validation. Run the app on a trusted, segmented network.
 - **No application-level access control.** Anyone with access to the desktop session can operate the fleet.
@@ -321,7 +321,7 @@ Use the **Demo Rig / Live Network** control in the top bar to switch modes. Swit
 - Windows x64.
 - Microsoft Edge WebView2 Runtime. It is included with current Windows releases; if it is missing, install the Evergreen runtime from Microsoft.
 - A network route to the miners, with TCP port 4028 and the vendor HTTP interface reachable.
-- Internet access only for live mempool.space statistics; the rest of the app works on an isolated LAN.
+- Internet access is optional: it enables live mempool.space statistics and Google Fonts. Without it, the app uses fallback fonts and offline network data on an isolated LAN.
 - No administrator privileges are required for normal operation.
 
 ### Getting started
@@ -429,7 +429,7 @@ ASIC Pulse — автономное приложение для Windows, пре�
 
 Приложение создано для тех, кто обслуживает майнеры в собственной сети. Укажите один или несколько диапазонов IPv4 — ASIC Pulse проверит адреса, определит совместимые устройства и построит актуальный список парка. Из этого списка можно открыть карточку отдельного майнера, сравнить мгновенный и средний хешрейт, массово сменить пулы и имена воркеров, переключить профиль питания, настроить частоту и напряжение, перезагрузить или подсветить выбранные устройства и запустить работу с прошивкой — всё в одном окне.
 
-Приложение принципиально локальное. Оно обращается к майнерам напрямую по TCP-порту 4028 и через их HTTP CGI-интерфейсы. Здесь нет аккаунта, облачного посредника, внешнего агента мониторинга и отправки телеметрии. Единственный необязательный запрос в интернет — публичная статистика сети Bitcoin с mempool.space.
+Приложение принципиально локальное. Оно обращается к майнерам напрямую по TCP-порту 4028 и через их HTTP CGI-интерфейсы. Здесь нет аккаунта, облачного посредника, внешнего агента мониторинга и отправки телеметрии. Единственный необязательный запрос, связанный с парком, — публичная статистика сети Bitcoin с mempool.space. Кроме того, интерфейс загружает шрифты и иконки с Google Fonts; если эти запросы заблокированы, используются локальные шрифты.
 
 ASIC Pulse рассчитан на смешанные парки. Antminer, WhatsMiner и Avalon могут находиться в одной таблице: приложение приводит данные разных устройств к общему формату, сохраняя доступ к управлению, которое поддерживает конкретная прошивка.
 
@@ -494,13 +494,13 @@ ASIC Pulse рассчитан на смешанные парки. Antminer, What
 - **Живой прогресс:** сканер показывает, сколько адресов проверено и сколько ASIC найдено.
 - **Отмена:** начатое сканирование можно остановить, не закрывая приложение.
 
-Для каждого адреса ASIC Pulse сначала отправляет в CGMiner/BMMiner API на порту 4028 объединённый запрос `summary+pools+stats+version`, затем при необходимости повторяет его с `summary`. Если API не отвечает, используется HTTP Digest CGI — веб-интерфейс, который есть у многих панелей Antminer и Avalon.
+Для каждого адреса ASIC Pulse сначала отправляет в CGMiner/BMMiner API на порту 4028 объединённый запрос `summary+pools+stats+version`, затем при необходимости повторяет его с `summary`. Если API не отвечает, используется HTTP Digest CGI — веб-интерфейс, который есть у многих панелей Antminer.
 
 В итоговый список могут попасть модель, мгновенный и средний хешрейт, температуры, скорость вентиляторов, время работы, активные пулы и воркеры, ошибки оборудования, доля отклонённых шар, строка прошивки, MAC-адрес, напряжение, частота, потребление и телеметрия по платам и чипам — если устройство её отдаёт.
 
 Два переключателя помогают работать с большими парками:
 
-- **Только найденные майнеры** скрывает недоступные строки при активном фильтре статуса.
+- **Только найденные майнеры** скрывает офлайн-строки, если не выбран фильтр «Офлайн».
 - **Показывать пулы 2/3** добавляет столбцы второго и третьего пула/воркера.
 
 #### Таблица парка
@@ -588,7 +588,7 @@ ASIC Pulse рассчитан на смешанные парки. Antminer, What
 - **Частоту:** от 100 до 1500 МГц.
 - **Напряжение:** необязательно, в вольтах.
 
-Если ручная частота включена, ASIC Pulse сначала применяет режим работы, а затем шаг частоты/напряжения. Для Antminer приложение читает текущую конфигурацию и записывает её обратно с новой частотой, чтобы не потерять пулы и другие настройки. Для WhatsMiner используется команда `set.miner.freq` на порту 4028. Для Avalon и других CGMiner-совместимых устройств применяется резервная команда `ascset`.
+Если ручная частота включена, ASIC Pulse сначала применяет режим работы, а затем шаг частоты/напряжения. Для Antminer приложение читает текущую конфигурацию и записывает её обратно с новой частотой, чтобы не потерять пулы и другие настройки. Для WhatsMiner используется команда `set.miner.freq` на порту 4028. Для Avalon и других CGMiner-совместимых устройств применяется резервная команда `ascset`. Напряжение записывается через конфигурацию Antminer; другие производители могут его игнорировать.
 
 Управление частотой и напряжением зависит от модели и прошивки. Штатная прошивка производителя может игнорировать эти поля; кастомные прошивки и поддерживаемые сборки WhatsMiner/Avalon принимают их чаще. Сверяйтесь со спецификацией производителя и меняйте настройки сначала на одном майнере.
 
@@ -700,7 +700,7 @@ ASIC Pulse не использует базу данных. Данные пар�
 |---|---|---|
 | **Antminer** (включая старые S7/S9/T9 и новые S19/S21/T21) | CGMiner API на порту 4028 и резервный HTTP Digest CGI | Настройка пулов/воркеров, режимы питания, частота/напряжение, перезагрузка, LED-поиск, endpoint прошивки |
 | **WhatsMiner** серии M | CGMiner-совместимый API на порту 4028 | Обнаружение и телеметрия; частота через `set.miner.freq`; остальные операции зависят от веб-интерфейса производителя |
-| **Avalon** A6/A7/A8 | Порт 4028 и резервный HTTP CGI | Обнаружение и телеметрия; частота через `ascset`; перезагрузка через резервную команду `restart` на порту 4028; остальное зависит от прошивки |
+| **Avalon** A6/A7/A8 | Порт 4028; CGI там, где поддерживается | Обнаружение и телеметрия; частота через `ascset`; перезагрузка через резервную команду `restart` на порту 4028; остальное зависит от прошивки |
 | **Другие CGMiner-совместимые ASIC** | `summary`/`pools`/`stats`/`version` на порту 4028 | Обнаружение и мониторинг; частота может работать через резервную команду `ascset` |
 
 API производителей различаются в зависимости от модели и прошивки. Воспринимайте таблицу как ориентир, а не гарантию. Приложение сообщает о подтверждённых операциях, но не может заставить устройство поддерживать endpoint, которого у него нет.
@@ -722,7 +722,7 @@ API производителей различаются в зависимост�
 ### Приватность и безопасность
 
 - **Без аккаунта и облака.** ASIC Pulse не требует входа, не выгружает данные парка и не содержит аналитики или телеметрии.
-- **Один необязательный внешний сервис.** Экран «Инструменты» запрашивает публичную статистику Bitcoin с mempool.space. Данные майнеров при этих запросах не передаются.
+- **Ограниченные внешние запросы.** Экран «Инструменты» запрашивает публичную статистику Bitcoin с mempool.space. Интерфейс также загружает шрифты и иконки с Google Fonts. Данные майнеров не передаются, но оба запроса раскрывают IP-адрес машины соответствующему сервису. При необходимости заблокируйте их на межсетевом экране; приложение продолжит работать с резервными шрифтами и офлайн-данными Bitcoin.
 - **Локальные доступы.** Логины и пароли майнеров хранятся в локальной TOML-конфигурации в открытом виде. Защитите учётную запись Windows и компьютер; по возможности используйте отдельную учётную запись оператора.
 - **Локальный HTTP.** CGI-интерфейсы майнеров опрашиваются по обычному HTTP в локальной сети. Здесь нет TLS и проверки сертификатов. Запускайте приложение в доверенной сегментированной сети.
 - **Нет управления доступом на уровне приложения.** Любой, у кого есть доступ к сеансу рабочего стола, может управлять парком.
@@ -735,7 +735,7 @@ API производителей различаются в зависимост�
 - Windows x64.
 - Среда выполнения Microsoft Edge WebView2. Она входит в актуальные выпуски Windows; если её нет, установите Evergreen Runtime от Microsoft.
 - Сетевой маршрут до майнеров, доступность TCP-порта 4028 и HTTP-интерфейса производителя.
-- Интернет нужен только для живой статистики mempool.space; остальная часть приложения работает в изолированной локальной сети.
+- Интернет не обязателен: он включает живую статистику mempool.space и загрузку шрифтов Google. Без него приложение использует резервные шрифты и офлайн-данные сети в изолированной локальной сети.
 - Для обычной работы права администратора не требуются.
 
 ### Первый запуск
