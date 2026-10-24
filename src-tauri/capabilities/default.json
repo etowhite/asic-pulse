@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "Default capability for ASIC Pulse main window",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

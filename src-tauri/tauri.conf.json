@@ -1,0 +1,29 @@
+{
+  "productName": "ASIC Pulse",
+  "version": "1.0.0",
+  "identifier": "com.asicpulse.btctools",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "ASIC Pulse — Material You BTC Tools",
+        "width": 1440,
+        "height": 880,
+        "minWidth": 1080,
+        "minHeight": 680,
+        "backgroundColor": "#141118"
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.ico"
+    ]
+  }
+}

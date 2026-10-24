@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASIC Pulse — Material You BTC Tools</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,1,0" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-theme="lavender">
+
+  <div id="snackbar" class="snackbar">OK</div>
+
+  <!-- Боковое меню Navigation Rail (Material You) -->
+  <nav class="nav-rail">
+    <div class="rail-logo" title="ASIC Pulse">
+      <span class="material-symbols-rounded" style="font-size:28px">memory</span>
+    </div>
+
+    <button class="rail-item active" onclick="switchScreen('scanner', this)">
+      <div class="rail-pill"><span class="material-symbols-rounded">radar</span></div>
+      <span data-i18n="navScanner">Сканер</span>
+    </button>
+
+    <button class="rail-item" onclick="switchScreen('dashboard', this)">
+      <div class="rail-pill"><span class="material-symbols-rounded">space_dashboard</span></div>
+      <span data-i18n="navDashboard">Дашборд</span>
+    </button>
+
+    <button class="rail-item" onclick="switchScreen('settings', this)">
+      <div class="rail-pill"><span class="material-symbols-rounded">tune</span></div>
+      <span data-i18n="navSettings">Настройки</span>
+    </button>
+
+    <button class="rail-item" onclick="switchScreen('logs', this)">
+      <span id="logsAlertBadge" class="rail-badge" style="display:none">0</span>
+      <div class="rail-pill"><span class="material-symbols-rounded">receipt_long</span></div>
+      <span data-i18n="navLogs">Журнал</span>
+    </button>
+  </nav>
+
+  <!-- Основная оболочка -->
+  <div class="app-shell">
+    <!-- Верхний хедер -->
+    <header class="top-bar">
+      <div class="brand-header">
+        <h1 data-i18n="appTitle">ASIC Pulse</h1>
+        <p data-i18n="appSubtitle">Управление парком ASIC-майнеров • Material You Edition</p>
+      </div>
+
+      <div class="controls-cluster">
+        <!-- 4 темы (Фиолетовая Lavender активна по умолчанию) -->
+        <div class="theme-dots">
+          <div class="theme-dot active" data-theme-btn="lavender" style="background:#D0BCFF" onclick="setTheme('lavender', this)" title="Lavender (Default)"></div>
+          <div class="theme-dot" data-theme-btn="blue" style="background:#A8C7FA" onclick="setTheme('blue', this)" title="Pixel Blue"></div>
+          <div class="theme-dot" data-theme-btn="mint" style="background:#89F8C7" onclick="setTheme('mint', this)" title="Android Mint"></div>
+          <div class="theme-dot" data-theme-btn="peach" style="background:#FFB59A" onclick="setTheme('peach', this)" title="Sunset Peach"></div>
+        </div>
+
+        <!-- Переключатель языка RU / EN -->
+        <button class="chip" onclick="toggleLanguage()">
+          <span class="material-symbols-rounded">translate</span>
+          <span id="langLabel">RU</span>
+        </button>
+
+        <!-- Тумблер Демо / Реальная сеть -->
+        <button id="demoToggleBtn" class="chip active" onclick="toggleDemoMode()">
+          <span class="material-symbols-rounded">science</span>
+          <span id="demoToggleText" data-i18n="demoMode">Демо-стенд</span>
+        </button>
+
+        <!-- Мониторинг (автообновление) -->
+        <button id="monitorBtn" class="chip" onclick="toggleMonitor()">
+          <span class="material-symbols-rounded">sync</span>
+          <span id="monitorBtnLabel" data-i18n="monitorBtn">Мониторинг</span>
+        </button>
+
+        <!-- Сканировать и Отмена -->
+        <button id="scanMainBtn" class="btn-primary" onclick="startScan()">
+          <span class="material-symbols-rounded">radar</span>
+          <span data-i18n="scanBtn">Сканировать</span>
+        </button>
+        <button id="cancelScanBtn" class="btn-primary btn-danger" style="display:none" onclick="stopScan()">
+          <span class="material-symbols-rounded">stop_circle</span>
+          <span data-i18n="cancelScanBtn">Стоп</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ЭКРАН 1: СКАНЕР (Полный паритет с BTC Tools) -->
+    <main id="screen-scanner" class="screen-view active">
+      <!-- KPI Карточки -->
+      <section class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label"><span data-i18n="kpiTotalHashrate">Суммарный хешрейт (RT / Avg)</span><span class="material-symbols-rounded" style="color:var(--md-primary)">bolt</span></div>
+          <div class="kpi-value" id="kpiHashVal">0.0 / 0.0 TH/s</div>
+          <div class="kpi-sub" data-i18n="kpiSubHashrate">В реальном времени • Порт 4028 & CGI</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label"><span data-i18n="kpiActiveMiners">Майнеры (Онлайн / Всего)</span><span class="material-symbols-rounded" style="color:var(--md-mint)">router</span></div>
+          <div class="kpi-value" id="kpiCountVal" style="color:var(--md-mint)">0 / 0 ASIC</div>
+          <div class="kpi-sub" data-i18n="kpiSubMiners">Активные сегменты локальной сети</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label"><span data-i18n="kpiAvgTemp">Средняя / Макс. температура</span><span class="material-symbols-rounded">thermostat</span></div>
+          <div class="kpi-value" id="kpiTempVal" style="color:var(--md-text)">0 °C</div>
+          <div class="kpi-sub" data-i18n="kpiSubTemp">По чипам хеш-плат</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label"><span data-i18n="kpiAnomalies">Требуют внимания</span><span class="material-symbols-rounded" style="color:var(--md-coral)">warning</span></div>
+          <div class="kpi-value" id="kpiAlertVal" style="color:var(--md-coral)">0</div>
+          <div class="kpi-sub" data-i18n="kpiSubAnomalies">Перегрев &gt;85°C, низкий TH/s или оффлайн</div>
+        </div>
+      </section>
+
+      <!-- Панель диапазонов IP + AUTO-IMPORT -->
+      <section class="ranges-panel">
+        <div class="ranges-header">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button class="chip active" onclick="runAutoImportSubnets()">
+              <span class="material-symbols-rounded">lan</span>
+              <span data-i18n="autoImportBtn">Автоимпорт подсетей</span>
+            </button>
+            <button class="chip" onclick="openRangeModal(null)">
+              <span class="material-symbols-rounded">add</span>
+              <span data-i18n="addRangeBtn">Добавить диапазон</span>
+            </button>
+            <button class="chip" onclick="openImportModal()">
+              <span class="material-symbols-rounded">upload_file</span>
+              <span data-i18n="importIpsBtn">Импорт IP</span>
+            </button>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+              <input id="onlySuccessChk" type="checkbox" checked onchange="appSettings.only_success_miners=this.checked;renderMinersTable();persistSettingsSilently()" />
+              <span data-i18n="onlySuccessMiners">Только найденные майнеры</span>
+            </label>
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+              <input id="extraPoolsChk" type="checkbox" onchange="appSettings.show_extra_pools=this.checked;renderMinersTable();persistSettingsSilently()" />
+              <span data-i18n="extraPoolsToggle">Показать пулы 2/3</span>
+            </label>
+          </div>
+        </div>
+        <div id="rangesList" class="ranges-list"></div>
+      </section>
+
+      <!-- Прогресс-бар сканирования -->
+      <div id="scanProgressWrap" class="scan-progress-wrap">
+        <span class="material-symbols-rounded" style="color:var(--md-primary)">radar</span>
+        <span id="scanProgressText" style="font-size:13px;font-weight:600">Сканирование...</span>
+        <div class="progress-track"><div id="scanProgressFill" class="progress-fill"></div></div>
+      </div>
+
+      <!-- Панель фильтров, массовых операций и поиска -->
+      <section class="toolbar-row">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="chip scanner-filter-chip active" onclick="setStatusFilter('all', this)" data-i18n="filterAll">Все</button>
+          <button class="chip scanner-filter-chip" onclick="setStatusFilter('online', this)" data-i18n="filterOnline">В норме</button>
+          <button class="chip scanner-filter-chip" onclick="setStatusFilter('alerts', this)" data-i18n="filterAlerts">Аномалии</button>
+          <button class="chip scanner-filter-chip" onclick="setStatusFilter('offline', this)" data-i18n="filterOffline">Оффлайн</button>
+
+          <button class="chip" onclick="openPoolsModal()"><span class="material-symbols-rounded">dns</span><span data-i18n="configPoolsBtn">Настройка пулов</span></button>
+          <button class="chip" onclick="openPowerModal()"><span class="material-symbols-rounded">electric_bolt</span><span data-i18n="powerControlBtn">Режим питания</span></button>
+          <button class="chip" onclick="openFirmwareModal()"><span class="material-symbols-rounded">system_update_alt</span><span data-i18n="firmwareUpgradeBtn">Прошивка</span></button>
+          <button class="chip" onclick="triggerBatchReboot(true)"><span class="material-symbols-rounded">restart_alt</span><span data-i18n="rebootAllBtn">Перезагрузить все</span></button>
+          <button class="chip" onclick="exportTableToCsv()"><span class="material-symbols-rounded">download</span><span data-i18n="exportCsvBtn">Экспорт CSV</span></button>
+        </div>
+
+        <div class="input-pill">
+          <span class="material-symbols-rounded" style="color:var(--md-text-sub)">search</span>
+          <input id="searchInput" type="text" data-i18n-placeholder="searchPlaceholder" placeholder="Поиск по IP, воркеру, модели..." oninput="renderMinersTable()" />
+        </div>
+      </section>
+
+      <!-- Таблица майнеров -->
+      <section class="table-container">
+        <table class="miners-table">
+          <thead>
+            <tr>
+              <th style="width:36px"><input type="checkbox" onchange="toggleSelectAllTable(this.checked)" /></th>
+              <th onclick="sortByColumn('ip')"><span data-i18n="colIp">IP-адрес</span> ↕</th>
+              <th onclick="sortByColumn('status')"><span data-i18n="colStatus">Статус</span> ↕</th>
+              <th onclick="sortByColumn('miner_type')"><span data-i18n="colType">Модель</span> ↕</th>
+              <th onclick="sortByColumn('working_mode')"><span data-i18n="colMode">Режим</span> ↕</th>
+              <th onclick="sortByColumn('hashrate_rt')"><span data-i18n="colHashRt">Хешрейт RT</span> ↕</th>
+              <th onclick="sortByColumn('hashrate_avg')"><span data-i18n="colHashAvg">Хешрейт Avg</span> ↕</th>
+              <th onclick="sortByColumn('temp_max')"><span data-i18n="colTemp">Температура</span> ↕</th>
+              <th onclick="sortByColumn('fan_speed_str')"><span data-i18n="colFan">Скорость кулеров</span> ↕</th>
+              <th onclick="sortByColumn('elapsed_sec')"><span data-i18n="colElapsed">Аптайм</span> ↕</th>
+              <th onclick="sortByColumn('pool1')"><span data-i18n="colPool1">Пул 1</span> ↕</th>
+              <th onclick="sortByColumn('worker1')"><span data-i18n="colWorker1">Воркер 1</span> ↕</th>
+              <th class="extra-pool-col" style="display:none" data-i18n="colPool2">Пул 2</th>
+              <th class="extra-pool-col" style="display:none" data-i18n="colWorker2">Воркер 2</th>
+              <th class="extra-pool-col" style="display:none" data-i18n="colPool3">Пул 3</th>
+              <th class="extra-pool-col" style="display:none" data-i18n="colWorker3">Воркер 3</th>
+            </tr>
+          </thead>
+          <tbody id="minersTableBody"></tbody>
+        </table>
+      </section>
+    </main>
+
+    <!-- ЭКРАН 2: ДАШБОРД -->
+    <section id="screen-dashboard" class="screen-view">
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label"><span data-i18n="kpiTotalHashrate">Суммарный хешрейт</span><span class="material-symbols-rounded">bolt</span></div>
+          <div class="kpi-value" id="dashKpiHash">0.0 TH/s</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label"><span data-i18n="kpiActiveMiners">Майнеры онлайн</span><span class="material-symbols-rounded">dns</span></div>
+          <div class="kpi-value" id="dashKpiCount" style="color:var(--md-mint)">0 / 0</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label"><span data-i18n="kpiAvgTemp">Средняя температура</span><span class="material-symbols-rounded">thermostat</span></div>
+          <div class="kpi-value" id="dashKpiTemp" style="color:var(--md-text)">0 °C</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label"><span data-i18n="kpiAnomalies">Аномалии</span><span class="material-symbols-rounded" style="color:var(--md-coral)">warning</span></div>
+          <div class="kpi-value" id="dashKpiAlerts" style="color:var(--md-coral)">0</div>
+        </div>
+      </div>
+
+      <div class="dash-split">
+        <div class="dash-panel">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <h3 style="margin:0" data-i18n="dashChartTitle">Динамика суммарного хешрейта за сессию (TH/s)</h3>
+            <button class="chip" onclick="exportDashboardHtml()">
+              <span class="material-symbols-rounded">html</span>
+              <span data-i18n="exportHtmlBtn">Отчёт HTML</span>
+            </button>
+          </div>
+          <canvas id="sessionHashChart" style="width:100%;height:210px"></canvas>
+        </div>
+
+        <div class="dash-panel">
+          <h3 data-i18n="dashAnomaliesTitle">Панель аномалий и предупреждений</h3>
+          <div id="dashAnomaliesList"></div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h3 style="margin:0" data-i18n="dashGridTitle">Карточки парка майнеров</h3>
+        <div style="display:flex;gap:8px">
+          <button class="chip dash-model-chip active" onclick="setDashModelFilter('all', this)" data-i18n="filterAll">Все</button>
+          <button class="chip dash-model-chip" onclick="setDashModelFilter('antminer', this)">Antminer</button>
+          <button class="chip dash-model-chip" onclick="setDashModelFilter('whatsminer', this)">WhatsMiner</button>
+          <button class="chip dash-model-chip" onclick="setDashModelFilter('avalon', this)">Avalon</button>
+        </div>
+      </div>
+
+      <div id="dashMinersGrid" class="dash-grid"></div>
+    </section>
+
+    <!-- ЭКРАН 3: НАСТРОЙКИ -->
+    <section id="screen-settings" class="screen-view">
+      <div class="dash-panel" style="max-width:820px">
+        <h3 data-i18n="settingsNetworkTitle">Параметры сканирования и сети</h3>
+        <div class="form-grid">
+          <div class="m3-field">
+            <label data-i18n="settingsScanTimeout">Таймаут сканирования порта 4028 (мс)</label>
+            <input id="cfgScanTimeout" type="number" value="450" />
+          </div>
+          <div class="m3-field">
+            <label data-i18n="settingsHttpTimeout">Таймаут HTTP CGI запросов (мс)</label>
+            <input id="cfgHttpTimeout" type="number" value="2500" />
+          </div>
+          <div class="m3-field">
+            <label data-i18n="settingsConcurrency">Число одновременных потоков (Semaphore)</label>
+            <input id="cfgConcurrency" type="number" value="128" />
+          </div>
+          <div class="m3-field">
+            <label data-i18n="settingsMonitorInterval">Интервал автообновления мониторинга (сек)</label>
+            <input id="cfgMonitorInt" type="number" value="15" />
+          </div>
+        </div>
+
+        <h3 style="margin-top:26px" data-i18n="settingsCredsTitle">Логины и пароли по умолчанию (HTTP Digest / CGI)</h3>
+        <div class="form-grid">
+          <div class="m3-field">
+            <label data-i18n="settingsAntminerCreds">Antminer (логин / пароль)</label>
+            <div style="display:flex;gap:8px">
+              <input id="cfgAntUser" type="text" value="root" />
+              <input id="cfgAntPass" type="password" value="root" />
+            </div>
+          </div>
+          <div class="m3-field">
+            <label data-i18n="settingsWhatsminerCreds">WhatsMiner (логин / пароль)</label>
+            <div style="display:flex;gap:8px">
+              <input id="cfgWhatsUser" type="text" value="admin" />
+              <input id="cfgWhatsPass" type="password" value="admin" />
+            </div>
+          </div>
+          <div class="m3-field">
+            <label data-i18n="settingsAvalonCreds">Avalon (логин / пароль)</label>
+            <div style="display:flex;gap:8px">
+              <input id="cfgAvaUser" type="text" value="root" />
+              <input id="cfgAvaPass" type="password" value="root" />
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:24px">
+          <button class="btn-primary" onclick="saveSettingsFromForm()">
+            <span class="material-symbols-rounded">save</span>
+            <span data-i18n="settingsSaveBtn">Сохранить настройки в %APPDATA%</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ЭКРАН 4: ЖУРНАЛ СОБЫТИЙ И ЛОГ-ФАЙЛ -->
+    <section id="screen-logs" class="screen-view">
+      <div class="dash-panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h3 style="margin:0" data-i18n="logsScreenTitle">Журнал событий и лог-файл операций (log4rs)</h3>
+          <div style="display:flex;gap:10px">
+            <button class="chip" onclick="loadEventLogsAndFile()"><span class="material-symbols-rounded">refresh</span><span data-i18n="refreshLogsBtn">Обновить лог</span></button>
+            <button class="chip" onclick="invokeBackend('open_logs_folder')"><span class="material-symbols-rounded">folder_open</span><span data-i18n="openLogsFolderBtn">Открыть папку логов</span></button>
+          </div>
+        </div>
+        <div id="eventLogsContainer" style="margin-bottom:18px"></div>
+        <pre id="rawLogViewer" class="mono" style="background:var(--md-surface-high);padding:16px;border-radius:18px;max-height:300px;overflow:auto;font-size:12px;color:var(--md-text-sub)"></pre>
+      </div>
+    </section>
+  </div>
+
+  <!-- Нижний плавающий Action Bar для выбранных майнеров -->
+  <div id="floatingBar" class="floating-bar">
+    <span id="selectedBadge" class="selected-badge">Выбрано: 0 ASIC</span>
+    <button class="chip" onclick="openPoolsModal()"><span class="material-symbols-rounded">dns</span><span data-i18n="configSelectedBtn">Применить к выбранным</span></button>
+    <button class="chip" onclick="openPowerModal()"><span class="material-symbols-rounded">electric_bolt</span><span data-i18n="powerControlBtn">Режим питания</span></button>
+    <button class="chip" onclick="triggerBatchLed()"><span class="material-symbols-rounded">flare</span><span data-i18n="ledLocateBtn">Поиск LED</span></button>
+    <button class="chip" onclick="triggerBatchReboot(false)"><span class="material-symbols-rounded">restart_alt</span><span data-i18n="rebootSelectedBtn">Перезагрузить выбранные</span></button>
+    <button class="chip" onclick="clearSelection()"><span class="material-symbols-rounded">close</span></button>
+  </div>
+
+  <!-- МОДАЛКА 1: Редактор диапазона IP -->
+  <div id="rangeModal" class="dialog-backdrop">
+    <div class="m3-dialog">
+      <h3 data-i18n="rangeModalTitle">Редактор диапазона IP</h3>
+      <div class="m3-field">
+        <label data-i18n="rangeLabel">Диапазон IPv4 (например 192.168.1.1-254)</label>
+        <input id="rangeInputVal" type="text" class="mono" value="192.168.1.1-254" />
+      </div>
+      <div class="m3-field">
+        <label data-i18n="rangeCommentLabel">Комментарий / Локация</label>
+        <input id="rangeCommentVal" type="text" placeholder="Ангар 1 / Стойка А" />
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:22px">
+        <button class="chip" onclick="closeRangeModal()" data-i18n="cancelBtn">Отмена</button>
+        <button class="btn-primary" onclick="saveRangeFromModal()" data-i18n="saveBtn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛКА 2: Массовая настройка пулов -->
+  <div id="poolsModal" class="dialog-backdrop">
+    <div class="m3-dialog">
+      <h3 data-i18n="poolsModalTitle">Массовая настройка пулов</h3>
+      <p style="margin:0;font-size:13px;color:var(--md-text-sub)" data-i18n="poolsModalDesc">Конфигурация до 3 пулов Stratum и суффиксов воркеров</p>
+      <div class="m3-field">
+        <label data-i18n="pool1UrlLabel">Пул 1 (URL:Port)</label>
+        <input id="pool1Url" type="text" class="mono" value="stratum+tcp://btc.viabtc.io:3333" />
+      </div>
+      <div class="m3-field">
+        <label data-i18n="pool2UrlLabel">Пул 2 (URL:Port)</label>
+        <input id="pool2Url" type="text" class="mono" value="stratum+tcp://btc.f2pool.com:1314" />
+      </div>
+      <div class="m3-field">
+        <label data-i18n="pool3UrlLabel">Пул 3 (URL:Port)</label>
+        <input id="pool3Url" type="text" class="mono" value="stratum+tcp://btc.foundryusa.com:3333" />
+      </div>
+      <div class="form-grid">
+        <div class="m3-field">
+          <label data-i18n="subaccountLabel">Субаккаунт / Имя воркера</label>
+          <input id="poolSubaccount" type="text" value="north_farm" />
+        </div>
+        <div class="m3-field">
+          <label data-i18n="poolPasswordLabel">Пароль пула</label>
+          <input id="poolPassword" type="text" value="123" />
+        </div>
+        <div class="m3-field">
+          <label data-i18n="suffixModeLabel">Суффикс воркера</label>
+          <select id="suffixModeSelect">
+            <option value="ip" data-i18n="suffixIp">Добавить IP-адрес (.1x101)</option>
+            <option value="nochange" data-i18n="suffixNoChange">Без суффикса (как есть)</option>
+            <option value="empty" data-i18n="suffixEmpty">Пустой воркер</option>
+            <option value="custom" data-i18n="suffixCustom">Свой суффикс</option>
+          </select>
+        </div>
+        <div class="m3-field">
+          <label data-i18n="customSuffixLabel">Кастомный суффикс</label>
+          <input id="customSuffixInput" type="text" placeholder="rack01" />
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:22px;flex-wrap:wrap">
+        <button class="chip" onclick="closePoolsModal()" data-i18n="cancelBtn">Отмена</button>
+        <button class="chip active" onclick="submitBatchPools(false)" data-i18n="configSelectedBtn">Применить к выбранным</button>
+        <button class="btn-primary" onclick="submitBatchPools(true)" data-i18n="configAllBtn">Применить ко всем</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛКА 3: Power Control (LPM / Overclock) -->
+  <div id="powerModal" class="dialog-backdrop">
+    <div class="m3-dialog">
+      <h3 data-i18n="powerModalTitle">Управление питанием и частотами (Power Control)</h3>
+      <div class="m3-field">
+        <label data-i18n="powerModelLabel">Семейство моделей</label>
+        <select id="powerModelSelect">
+          <option value="Antminer S21 / T21 / S19">Antminer S21 / T21 / S19 Series</option>
+          <option value="Antminer S9 / T9 Legacy">Antminer S9 / T9 Legacy</option>
+          <option value="WhatsMiner M50 / M60">WhatsMiner M50 / M60 Series</option>
+          <option value="Avalon A6 / A7 / A8">AvalonMiner A6 / A7 / A8</option>
+        </select>
+      </div>
+      <div class="m3-field">
+        <label data-i18n="powerOptionLabel">Режим работы (прошивка)</label>
+        <select id="powerOptionSelect">
+          <option value="normal" data-i18n="modeNormal">Normal (Штатный режим)</option>
+          <option value="lpm" data-i18n="modeLpm">LPM (Низкое энергопотребление)</option>
+          <option value="elpm" data-i18n="modeElpm">Enhanced LPM (Глубокое энергосбережение)</option>
+          <option value="overclock" data-i18n="modeOverclock">Overclock (Разгон хешрейта)</option>
+          <option value="underclock" data-i18n="modeUnderclock">Underclock (Снижение частот)</option>
+          <option value="sleep" data-i18n="modeSleep">Sleep (Спящий режим)</option>
+        </select>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:22px">
+        <button class="chip" onclick="closePowerModal()" data-i18n="cancelBtn">Отмена</button>
+        <button class="chip active" onclick="submitPowerControl(false)" data-i18n="configSelectedBtn">Применить к выбранным</button>
+        <button class="btn-primary" onclick="submitPowerControl(true)" data-i18n="configAllBtn">Применить ко всем</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛКА 4: Пакетная прошивка (Batch Firmware Upgrade) -->
+  <div id="firmwareModal" class="dialog-backdrop">
+    <div class="m3-dialog">
+      <h3 data-i18n="fwModalTitle">Пакетное обновление прошивки</h3>
+      <div class="m3-field">
+        <label data-i18n="fwFileLabel">Файл прошивки (.tar.gz / .bmu / .swu)</label>
+        <input id="fwFileInput" type="file" />
+      </div>
+      <div id="fwResultsList" style="max-height:220px;overflow-y:auto"></div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:22px">
+        <button class="chip" onclick="closeFirmwareModal()" data-i18n="cancelBtn">Отмена</button>
+        <button class="btn-primary" onclick="runFirmwareUpgrade()" data-i18n="fwStartBtn">Запустить прошивку</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛКА 5: Детальное окно машины (Двойной клик по майнеру) -->
+  <div id="minerDetailModal" class="dialog-backdrop">
+    <div class="m3-dialog wide">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <h3 id="detailMinerIp" class="mono">192.168.1.101</h3>
+          <p id="detailMinerSub" style="margin:2px 0 12px 0;font-size:12.5px;color:var(--md-text-sub)"></p>
+        </div>
+        <button class="chip" onclick="closeMinerDetailModal()"><span class="material-symbols-rounded">close</span></button>
+      </div>
+
+      <div class="kpi-grid" style="margin-bottom:14px">
+        <div class="kpi-card" style="padding:12px 16px"><div class="kpi-label">Hashrate RT</div><div id="detailHashRt" class="kpi-value" style="font-size:20px">0 TH/s</div></div>
+        <div class="kpi-card" style="padding:12px 16px"><div class="kpi-label">Chip Temp</div><div id="detailTempMax" class="kpi-value" style="font-size:20px">0 °C</div></div>
+        <div class="kpi-card" style="padding:12px 16px"><div class="kpi-label">Fans RPM</div><div id="detailFans" class="kpi-value" style="font-size:18px">0</div></div>
+        <div class="kpi-card" style="padding:12px 16px"><div class="kpi-label">HW Errors</div><div id="detailHwErr" class="kpi-value" style="font-size:18px;color:var(--md-coral)">0</div></div>
+      </div>
+
+      <h4 style="margin:10px 0 8px 0" data-i18n="boardsTitle">Состояние хеш-плат и чипов</h4>
+      <div class="table-container" style="margin-bottom:14px">
+        <table class="miners-table">
+          <thead>
+            <tr>
+              <th data-i18n="boardColIdx">Плата</th>
+              <th data-i18n="boardColChips">Чипы</th>
+              <th data-i18n="boardColFreq">Частота</th>
+              <th data-i18n="boardColVolt">Напряжение</th>
+              <th data-i18n="boardColTempB">Темп. платы</th>
+              <th data-i18n="boardColTempC">Темп. чипов</th>
+              <th data-i18n="boardColHash">Хешрейт</th>
+              <th data-i18n="boardColHw">Ошибки HW</th>
+            </tr>
+          </thead>
+          <tbody id="detailBoardsBody"></tbody>
+        </table>
+      </div>
+
+      <canvas id="minerMiniChart" style="width:100%;height:110px;background:var(--md-surface);border-radius:16px;margin-bottom:14px"></canvas>
+
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-primary" onclick="openActiveMinerWeb()"><span class="material-symbols-rounded">open_in_new</span><span data-i18n="openWebUiBtn">Открыть Web UI</span></button>
+          <button class="chip" onclick="pingActiveMiner()"><span class="material-symbols-rounded">network_ping</span><span data-i18n="pingBtn">Пинг</span></button>
+          <button class="chip" onclick="copyActiveMinerField('ip')"><span class="material-symbols-rounded">content_copy</span><span data-i18n="copyIpBtn">Копировать IP</span></button>
+          <button class="chip" onclick="copyActiveMinerField('worker')"><span class="material-symbols-rounded">badge</span><span data-i18n="copyWorkerBtn">Копировать воркер</span></button>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="chip" onclick="closeMinerDetailModal();openPoolsModal()"><span class="material-symbols-rounded">dns</span><span data-i18n="configPoolsBtn">Настройка пулов</span></button>
+          <button class="chip" onclick="invokeBackend('batch_reboot',{ips:[activeDetailMinerIp]}).then(m=>showToast(m))"><span class="material-symbols-rounded">restart_alt</span><span>Reboot</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛКА 6: Импорт IP из CSV/текста -->
+  <div id="importModal" class="dialog-backdrop">
+    <div class="m3-dialog">
+      <h3 data-i18n="importModalTitle">Импорт списка IP или диапазонов (CSV / Текст)</h3>
+      <div class="m3-field">
+        <label data-i18n="importModalHint">Вставьте по одному диапазону или IP на строку (формат: 192.168.1.1-254,Стойка 1)</label>
+        <textarea id="importTextarea" rows="6" class="mono" placeholder="192.168.1.1-254,Rack 1&#10;192.168.2.1-254,Rack 2"></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px">
+        <button class="chip" onclick="closeImportModal()" data-i18n="cancelBtn">Отмена</button>
+        <button class="btn-primary" onclick="applyImportedIps()" data-i18n="saveBtn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
