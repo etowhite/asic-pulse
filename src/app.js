@@ -33,6 +33,16 @@ let minerTelemetryHistory = {};
 let activeDetailMinerIp = null;
 let editingRangeId = null;
 
+let btcNetwork = {
+  price: 100000,
+  hashrateHs: 1e21,
+  difficulty: 1.2e14,
+  blockHeight: 920000,
+  updatedAt: null,
+  live: false
+};
+let statsLoading = false;
+
 async function invokeBackend(cmd, args = {}) {
   if (window.__TAURI__ && window.__TAURI__.core) {
     return await window.__TAURI__.core.invoke(cmd, args);
@@ -69,6 +79,15 @@ async function browserFallbackMock(cmd, args) {
   }
   if (cmd === "read_log_file") {
     return "[INFO] ASIC Pulse log4rs initialized.\n[INFO] Subnet scan 192.168.1.1-254 finished.";
+  }
+  if (cmd === "batch_power_control") {
+    return `Режим питания '${args.payload?.work_mode}' применен к ${args.payload?.ips?.length || 0} ASIC`;
+  }
+  if (cmd === "batch_set_frequency") {
+    return `Частота ${args.payload?.freq_mhz} MHz применена к ${args.payload?.ips?.length || 0} ASIC`;
+  }
+  if (cmd === "batch_configure_pools") {
+    return `Пулы применены к ${args.payload?.ips?.length || 0} майнерам`;
   }
   return "OK";
 }
@@ -124,6 +143,9 @@ function switchScreen(screenId, btnEl) {
   if (btnEl) btnEl.classList.add("active");
   if (screenId === "dashboard") {
     renderDashboard();
+  } else if (screenId === "tools") {
+    renderToolsScreen();
+    if (!btcNetwork.live && !statsLoading) loadBtcNetworkStats();
   } else if (screenId === "logs") {
     loadEventLogsAndFile();
   }
@@ -150,11 +172,13 @@ function toggleLanguage() {
   renderIpRanges();
   renderMinersTable();
   renderDashboard();
+  renderToolsScreen();
 }
 
 function toggleDemoMode() {
   appSettings.demo_mode = !appSettings.demo_mode;
   updateDemoToggleUI();
+  persistSettingsSilently();
   startScan();
 }
 
@@ -736,7 +760,8 @@ async function submitBatchPools(allMiners) {
     pool3_user: document.getElementById("poolSubaccount").value.trim(),
     pool3_pw: document.getElementById("poolPassword").value.trim() || "123",
     suffix_mode: document.getElementById("suffixModeSelect").value,
-    custom_suffix: document.getElementById("customSuffixInput").value.trim()
+    custom_suffix: document.getElementById("customSuffixInput").value.trim(),
+    difficulty: Math.round(Number(document.getElementById("poolDifficulty").value)) || null
   };
 
   miners.forEach(m => {
@@ -755,10 +780,39 @@ async function submitBatchPools(allMiners) {
 }
 
 function openPowerModal() {
+  const model = document.getElementById("powerModelSelect").value;
+  model && syncPowerFreqPreset();
   document.getElementById("powerModal").classList.add("open");
 }
 function closePowerModal() {
   document.getElementById("powerModal").classList.remove("open");
+}
+
+function syncPowerFreqPreset() {
+  const presets = {
+    "Antminer S21 / T21 / S19": 675,
+    "Antminer S9 / T9 Legacy": 500,
+    "WhatsMiner M50 / M60": 740,
+    "Avalon A6 / A7 / A8": 600
+  };
+  const factors = {
+    normal: 1,
+    overclock: 1.05,
+    underclock: 0.9,
+    lpm: 0.85,
+    elpm: 0.75,
+    sleep: 0.5
+  };
+  const base = presets[document.getElementById("powerModelSelect").value] || 675;
+  const mode = document.getElementById("powerOptionSelect").value;
+  const freq = Math.round((base * (factors[mode] ?? 1)) / 5) * 5;
+  document.getElementById("powerFreqInput").value = Math.max(100, freq);
+}
+
+function toggleCustomFreqFields() {
+  const checked = document.getElementById("powerCustomFreqChk").checked;
+  document.getElementById("powerFreqFields").style.display = checked ? "grid" : "none";
+  if (checked) syncPowerFreqPreset();
 }
 
 async function submitPowerControl(allMiners) {
@@ -766,18 +820,44 @@ async function submitPowerControl(allMiners) {
   if (!targetIps.length) return;
   const workMode = document.getElementById("powerOptionSelect").value;
   const modelFamily = document.getElementById("powerModelSelect").value;
+  const customFreq = document.getElementById("powerCustomFreqChk").checked;
+  const freqMhz = Math.round(Number(document.getElementById("powerFreqInput").value)) || 0;
+  const voltageRaw = document.getElementById("powerVoltageInput").value.trim();
+  const voltageV = voltageRaw ? Number(voltageRaw) : null;
+
+  if (customFreq && (freqMhz < 100 || freqMhz > 1500)) {
+    showToast("Частота должна быть в диапазоне 100–1500 MHz");
+    return;
+  }
 
   miners.forEach(m => {
     if (targetIps.includes(m.ip)) {
       m.working_mode = workMode.toUpperCase();
+      if (customFreq) {
+        m.freq_mhz = freqMhz;
+        if (voltageV) m.voltage_v = voltageV;
+        (m.boards || []).forEach(b => {
+          b.freq_mhz = freqMhz;
+          if (voltageV) b.voltage_v = voltageV;
+        });
+      }
     }
   });
 
-  const msg = await invokeBackend("batch_power_control", {
+  let msg = await invokeBackend("batch_power_control", {
     payload: { ips: targetIps, model_family: modelFamily, work_mode: workMode }
   });
+
+  if (customFreq) {
+    const freqMsg = await invokeBackend("batch_set_frequency", {
+      payload: { ips: targetIps, model_family: modelFamily, freq_mhz: freqMhz, voltage_v: voltageV }
+    });
+    msg = `${msg} • ${freqMsg}`;
+  }
+
   closePowerModal();
   renderMinersTable();
+  renderDashboard();
   showToast(msg);
 }
 
@@ -877,6 +957,229 @@ function applyImportedIps() {
   persistSettingsSilently();
 }
 
+function loadImportFile(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = String(e.target.result || "").trim();
+    if (text) {
+      document.getElementById("importTextarea").value = text;
+      showToast(`${file.name}: ${text.split(/\r?\n/).length} строк`);
+    }
+  };
+  reader.readAsText(file, "UTF-8");
+}
+
+/* --- Tools: profitability calculator & Bitcoin network --- */
+function fmtUsd(value, digits = 0) {
+  const sign = value < 0 ? "-" : "";
+  return `${sign}$${Math.abs(value).toLocaleString("en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  })}`;
+}
+
+function blockRewardAt(height) {
+  return 50 / Math.pow(2, Math.floor(height / 210000));
+}
+
+function nextHalvingHeight(height) {
+  return Math.ceil((height + 1) / 210000) * 210000;
+}
+
+function restoreCalculatorInputs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("asic_pulse_calc") || "{}");
+    ["calcHashrate", "calcPower", "calcTariff", "calcPoolFee", "calcBtcPrice", "calcNetworkHash"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && saved[id] !== undefined && Number.isFinite(Number(saved[id]))) {
+        el.value = saved[id];
+      }
+    });
+  } catch (_) {}
+}
+
+function recalcProfitability() {
+  const val = id => Number(document.getElementById(id)?.value) || 0;
+  const hashrate = val("calcHashrate");
+  const power = val("calcPower");
+  const tariff = val("calcTariff");
+  const fee = val("calcPoolFee");
+  const btcPrice = val("calcBtcPrice");
+  const netHashEh = val("calcNetworkHash");
+
+  const setText = (id, text, tone) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    el.classList.remove("positive", "negative");
+    if (tone) el.classList.add(tone);
+  };
+
+  if (hashrate <= 0 || netHashEh <= 0) {
+    ["calcBtcDay", "calcRevenueDay", "calcCostDay", "calcProfitDay", "calcProfitMonth", "calcMargin", "calcBreakEven"]
+      .forEach(id => setText(id, "—"));
+  } else {
+    const netHashHs = netHashEh * 1e18;
+    const reward = blockRewardAt(btcNetwork.blockHeight);
+    const btcDay = (hashrate * 1e12 / netHashHs) * 144 * reward * (1 - fee / 100);
+    const revenue = btcDay * btcPrice;
+    const cost = (power / 1000) * 24 * tariff;
+    const profit = revenue - cost;
+    const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
+    const breakEven = btcDay > 0 ? cost / btcDay : 0;
+
+    setText("calcBtcDay", btcDay >= 0.000001 ? btcDay.toFixed(6) : btcDay.toFixed(8));
+    setText("calcRevenueDay", fmtUsd(revenue, 2));
+    setText("calcCostDay", fmtUsd(cost, 2));
+    setText("calcProfitDay", fmtUsd(profit, 2), profit >= 0 ? "positive" : "negative");
+    setText("calcProfitMonth", fmtUsd(profit * 30, 0), profit >= 0 ? "positive" : "negative");
+    setText("calcMargin", `${margin.toFixed(1)}%`, margin >= 0 ? "positive" : "negative");
+    setText("calcBreakEven", btcDay > 0 ? fmtUsd(breakEven) : "—");
+  }
+
+  try {
+    const state = {};
+    ["calcHashrate", "calcPower", "calcTariff", "calcPoolFee", "calcBtcPrice", "calcNetworkHash"].forEach(id => {
+      state[id] = document.getElementById(id)?.value;
+    });
+    localStorage.setItem("asic_pulse_calc", JSON.stringify(state));
+  } catch (_) {}
+}
+
+function fillCalculatorFromFleet(silent = false) {
+  if (!miners.length) {
+    if (!silent) showToast(t("emptyTableTitle"));
+    return;
+  }
+  const totalHash = miners.reduce((acc, m) => acc + (Number(m.hashrate_rt) || 0), 0);
+  const totalPower = miners.reduce((acc, m) => acc + (Number(m.power_w) || 0), 0)
+    || Math.round(totalHash * 18);
+  document.getElementById("calcHashrate").value = totalHash.toFixed(1);
+  document.getElementById("calcPower").value = totalPower;
+  if (btcNetwork.live) {
+    document.getElementById("calcBtcPrice").value = Math.round(btcNetwork.price);
+    document.getElementById("calcNetworkHash").value = Math.round(btcNetwork.hashrateHs / 1e18);
+  }
+  recalcProfitability();
+  if (!silent) showToast(t("toastFleetFilled"));
+}
+
+function renderToolsScreen() {
+  const priceEl = document.getElementById("toolsKpiPrice");
+  if (!priceEl) return;
+
+  const height = btcNetwork.blockHeight;
+  const reward = blockRewardAt(height);
+  const nextHeight = nextHalvingHeight(height);
+  const blocksLeft = Math.max(0, nextHeight - height);
+  const daysLeft = blocksLeft / 144;
+  const halvingDate = new Date(Date.now() + daysLeft * 86400000);
+  const hashEh = btcNetwork.hashrateHs / 1e18;
+  const difficultyT = btcNetwork.difficulty / 1e12;
+
+  priceEl.textContent = fmtUsd(btcNetwork.price);
+  document.getElementById("toolsKpiPriceSub").textContent =
+    btcNetwork.live ? `${t("toolsLive")} • mempool.space` : t("toolsOffline");
+  document.getElementById("toolsKpiHash").textContent =
+    `${hashEh.toLocaleString("en-US", { maximumFractionDigits: 1 })}`;
+  document.getElementById("toolsKpiDiff").textContent =
+    `${difficultyT.toLocaleString("en-US", { maximumFractionDigits: 1 })}`;
+
+  document.getElementById("toolsKpiHalving").textContent =
+    daysLeft > 365 ? `${(daysLeft / 365).toFixed(1)} ${currentLang === "ru" ? "г." : "y"}` : `${Math.round(daysLeft)} ${t("toolsDays")}`;
+  document.getElementById("toolsKpiHalvingSub").textContent =
+    `${blocksLeft.toLocaleString("en-US")} ${currentLang === "ru" ? "блоков" : "blocks"} • ${halvingDate.toLocaleDateString(currentLang === "ru" ? "ru-RU" : "en-US")}`;
+
+  const rows = [
+    [t("toolsBlockHeight"), height.toLocaleString("en-US")],
+    [t("toolsBlockReward"), `${reward} BTC`],
+    [t("toolsNetworkHashrate"), `${hashEh.toLocaleString("en-US", { maximumFractionDigits: 1 })} EH/s`],
+    [t("toolsDifficulty"), `${difficultyT.toLocaleString("en-US", { maximumFractionDigits: 1 })} T`],
+    [t("toolsHalvingDate"), `${halvingDate.toLocaleDateString(currentLang === "ru" ? "ru-RU" : "en-US")} (${blocksLeft.toLocaleString("en-US")} ${currentLang === "ru" ? "блоков" : "blocks"})`]
+  ];
+  document.getElementById("netStatsList").innerHTML = rows.map(([label, value]) => `
+    <div class="net-row">
+      <span class="net-label">${label}</span>
+      <span class="net-value mono">${value}</span>
+    </div>
+  `).join("");
+
+  const updated = document.getElementById("toolsUpdated");
+  updated.textContent = btcNetwork.live && btcNetwork.updatedAt
+    ? `${t("toolsUpdatedAt")}: ${btcNetwork.updatedAt.toLocaleTimeString()} • mempool.space`
+    : `${t("toolsOffline")} • mempool.space`;
+
+  recalcProfitability();
+}
+
+async function fetchWithTimeout(url, timeoutMs = 8000, asText = false) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return asText ? await res.text() : await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function loadBtcNetworkStats(force = false) {
+  if (statsLoading) return;
+  statsLoading = true;
+  const results = await Promise.allSettled([
+    fetchWithTimeout("https://mempool.space/api/v1/prices"),
+    fetchWithTimeout("https://mempool.space/api/v1/mining/hashrate/3d"),
+    fetchWithTimeout("https://mempool.space/api/blocks/tip/height", 8000, true)
+  ]);
+
+  let live = false;
+  const [priceRes, hashRes, heightRes] = results;
+
+  if (priceRes.status === "fulfilled" && Number(priceRes.value?.USD) > 0) {
+    btcNetwork.price = Number(priceRes.value.USD);
+    live = true;
+  }
+  if (hashRes.status === "fulfilled") {
+    const hashList = Array.isArray(hashRes.value?.hashrates) ? hashRes.value.hashrates : [];
+    const diffList = Array.isArray(hashRes.value?.difficulty) ? hashRes.value.difficulty : [];
+    const lastAvg = hashList.length ? Number(hashList[hashList.length - 1]?.avgHashrate) : 0;
+    const lastDiff = diffList.length ? Number(diffList[diffList.length - 1]?.difficulty) : 0;
+    const currentHash = Number(hashRes.value?.currentHashrate) || lastAvg;
+    const currentDiff = Number(hashRes.value?.currentDifficulty) || lastDiff;
+    if (currentHash > 0) {
+      btcNetwork.hashrateHs = currentHash;
+      live = true;
+    }
+    if (currentDiff > 0) btcNetwork.difficulty = currentDiff;
+  }
+  if (heightRes.status === "fulfilled") {
+    const height = Number(String(heightRes.value).trim());
+    if (height > 0) {
+      btcNetwork.blockHeight = height;
+      live = true;
+    }
+  }
+
+  btcNetwork.live = live;
+  btcNetwork.updatedAt = new Date();
+  statsLoading = false;
+
+  if (live) {
+    const priceInput = document.getElementById("calcBtcPrice");
+    const hashInput = document.getElementById("calcNetworkHash");
+    if (priceInput) priceInput.value = Math.round(btcNetwork.price);
+    if (hashInput) hashInput.value = Math.round(btcNetwork.hashrateHs / 1e18);
+  }
+
+  renderToolsScreen();
+  if (force) {
+    showToast(live ? `${t("toolsLive")} • mempool.space` : t("toolsNoData"));
+  }
+}
+
 /* --- Settings & Logs --- */
 function populateSettingsForm() {
   document.getElementById("cfgScanTimeout").value = appSettings.scan_timeout_ms;
@@ -954,5 +1257,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   updateDemoToggleUI();
   populateSettingsForm();
   renderIpRanges();
+  restoreCalculatorInputs();
+  renderToolsScreen();
+  loadBtcNetworkStats();
   await startScan();
+  if (!(Number(document.getElementById("calcHashrate")?.value) > 0)) {
+    fillCalculatorFromFleet(true);
+  }
 });

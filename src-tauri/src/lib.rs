@@ -202,6 +202,16 @@ pub struct PoolConfigPayload {
     pub pool3_pw: String,
     pub suffix_mode: String, // "ip" | "nochange" | "empty" | "custom"
     pub custom_suffix: String,
+    #[serde(default)]
+    pub difficulty: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FrequencyControlPayload {
+    pub ips: Vec<String>,
+    pub model_family: String,
+    pub freq_mhz: u32,
+    pub voltage_v: Option<f64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -522,6 +532,16 @@ fn expand_ip_range(input: &str) -> Vec<String> {
 }
 
 async fn query_port_4028(ip: &str, cmd: &str, timeout_ms: u64) -> Option<String> {
+    let payload = format!("{{\"command\":\"{}\"}}", cmd);
+    query_port_4028_payload(ip, &payload, timeout_ms).await
+}
+
+async fn query_port_4028_raw(ip: &str, payload: &str, timeout_ms: u64) -> Option<String> {
+    let framed = format!("{}\n", payload);
+    query_port_4028_payload(ip, &framed, timeout_ms).await
+}
+
+async fn query_port_4028_payload(ip: &str, payload: &str, timeout_ms: u64) -> Option<String> {
     let addr: SocketAddr = format!("{}:4028", ip).parse().ok()?;
     let mut stream =
         tokio::time::timeout(Duration::from_millis(timeout_ms), TcpStream::connect(addr))
@@ -529,7 +549,6 @@ async fn query_port_4028(ip: &str, cmd: &str, timeout_ms: u64) -> Option<String>
             .ok()?
             .ok()?;
 
-    let payload = format!("{{\"command\":\"{}\"}}", cmd);
     stream.write_all(payload.as_bytes()).await.ok()?;
 
     let mut buffer = Vec::with_capacity(8192);
@@ -942,14 +961,20 @@ async fn batch_configure_pools(payload: PoolConfigPayload) -> Result<String, Str
         };
 
         // Попытка 1: Современный Antminer JSON CGI
-        let json_body = serde_json::json!({
-            "pools": [
-                { "url": payload.pool1_url, "user": w1, "pass": payload.pool1_pw },
-                { "url": payload.pool2_url, "user": w2, "pass": payload.pool2_pw },
-                { "url": payload.pool3_url, "user": w3, "pass": payload.pool3_pw }
-            ]
-        })
-        .to_string();
+        let diff = payload.difficulty.unwrap_or(0);
+        let mut pools: Vec<serde_json::Value> = vec![
+            serde_json::json!({ "url": payload.pool1_url, "user": w1, "pass": payload.pool1_pw }),
+            serde_json::json!({ "url": payload.pool2_url, "user": w2, "pass": payload.pool2_pw }),
+            serde_json::json!({ "url": payload.pool3_url, "user": w3, "pass": payload.pool3_pw }),
+        ];
+        if diff > 0 {
+            for pool in pools.iter_mut() {
+                if pool["url"].as_str().is_some_and(|url| !url.is_empty()) {
+                    pool["diff"] = serde_json::json!(diff);
+                }
+            }
+        }
+        let json_body = serde_json::json!({ "pools": pools }).to_string();
 
         let url = format!("http://{}/cgi-bin/set_miner_conf.cgi", ip);
         if http_digest_post(
@@ -1044,6 +1069,101 @@ async fn batch_power_control(payload: PowerControlPayload) -> Result<String, Str
         payload.work_mode, ok_cnt, total
     );
     push_event("info", "Power Control", &msg);
+    Ok(msg)
+}
+
+#[tauri::command]
+async fn batch_set_frequency(payload: FrequencyControlPayload) -> Result<String, String> {
+    let settings = load_settings_internal();
+    let total = payload.ips.len();
+    if total == 0 {
+        return Err("Не выбрано ни одного майнера".into());
+    }
+    if !(100..=1500).contains(&payload.freq_mhz) {
+        return Err("Частота должна быть в диапазоне 100–1500 MHz".into());
+    }
+
+    if settings.demo_mode {
+        tokio::time::sleep(Duration::from_millis(260)).await;
+        let msg = match payload.voltage_v {
+            Some(v) => format!(
+                "Частота {} MHz / {:.2} V применена к {} ASIC",
+                payload.freq_mhz, v, total
+            ),
+            None => format!(
+                "Частота {} MHz применена к {} ASIC",
+                payload.freq_mhz, total
+            ),
+        };
+        push_event("info", "Настройка частоты", &msg);
+        return Ok(msg);
+    }
+
+    let is_whatsminer = payload.model_family.to_lowercase().contains("whats");
+    let is_avalon = payload.model_family.to_lowercase().contains("avalon");
+    let mut ok_cnt = 0usize;
+
+    for ip in &payload.ips {
+        let mut applied = false;
+
+        if is_whatsminer {
+            let cmd = serde_json::json!({
+                "command": "set.miner.freq",
+                "parameter": payload.freq_mhz.to_string()
+            })
+            .to_string();
+            applied = query_port_4028_payload(ip, &cmd, settings.scan_timeout_ms)
+                .await
+                .is_some();
+        } else if !is_avalon {
+            // Antminer: читаем текущий конфиг, чтобы не сбросить пулы и прочие настройки,
+            // затем возвращаем его с изменённой частотой.
+            let get_url = format!("http://{}/cgi-bin/get_miner_conf.cgi", ip);
+            if let Some(raw) = http_digest_get(
+                &get_url,
+                &settings.antminer_user,
+                &settings.antminer_pass,
+                settings.http_timeout_ms,
+            )
+            .await
+            {
+                if let Ok(mut conf) = serde_json::from_str::<Value>(&raw) {
+                    conf["freq"] = serde_json::json!(payload.freq_mhz);
+                    if let Some(v) = payload.voltage_v {
+                        conf["voltage"] = serde_json::json!(v);
+                    }
+                    let set_url = format!("http://{}/cgi-bin/set_miner_conf.cgi", ip);
+                    applied = http_digest_post(
+                        &set_url,
+                        &settings.antminer_user,
+                        &settings.antminer_pass,
+                        conf.to_string(),
+                        "application/json",
+                        settings.http_timeout_ms,
+                    )
+                    .await;
+                }
+            }
+        }
+
+        // Фолбэк через API порта 4028 (cgminer / Avalon / кастомные прошивки)
+        if !applied {
+            let cmd = format!("ascset|0,freq,{}", payload.freq_mhz);
+            applied = query_port_4028_raw(ip, &cmd, settings.scan_timeout_ms)
+                .await
+                .is_some();
+        }
+
+        if applied {
+            ok_cnt += 1;
+        }
+    }
+
+    let msg = format!(
+        "Частота {} MHz: применено на {} из {} ASIC",
+        payload.freq_mhz, ok_cnt, total
+    );
+    push_event("info", "Настройка частоты", &msg);
     Ok(msg)
 }
 
@@ -1545,6 +1665,7 @@ pub fn run() {
             get_scan_progress,
             batch_configure_pools,
             batch_power_control,
+            batch_set_frequency,
             batch_reboot,
             toggle_led_locate,
             batch_firmware_upgrade,

@@ -1,0 +1,14 @@
+# Build artifacts
+target/
+src-tauri/target/
+build.log
+
+# Compiled binaries
+*.exe
+*.msi
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

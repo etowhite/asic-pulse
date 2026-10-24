@@ -30,6 +30,11 @@
       <span data-i18n="navDashboard">Дашборд</span>
     </button>
 
+    <button class="rail-item" onclick="switchScreen('tools', this)">
+      <div class="rail-pill"><span class="material-symbols-rounded">calculate</span></div>
+      <span data-i18n="navTools">Инструменты</span>
+    </button>
+
     <button class="rail-item" onclick="switchScreen('settings', this)">
       <div class="rail-pill"><span class="material-symbols-rounded">tune</span></div>
       <span data-i18n="navSettings">Настройки</span>
@@ -256,7 +261,96 @@
       <div id="dashMinersGrid" class="dash-grid"></div>
     </section>
 
-    <!-- ЭКРАН 3: НАСТРОЙКИ -->
+    <!-- ЭКРАН 3: ИНСТРУМЕНТЫ (калькулятор доходности и сеть Bitcoin) -->
+    <section id="screen-tools" class="screen-view">
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label"><span data-i18n="toolsBtcPrice">BTC / USD</span><span class="material-symbols-rounded" style="color:var(--md-primary)">currency_bitcoin</span></div>
+          <div class="kpi-value" id="toolsKpiPrice">—</div>
+          <div class="kpi-sub" id="toolsKpiPriceSub" data-i18n="toolsOffline">Офлайн-данные</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label"><span data-i18n="toolsNetworkHashrate">Хешрейт сети</span><span class="material-symbols-rounded" style="color:var(--md-mint)">speed</span></div>
+          <div class="kpi-value" id="toolsKpiHash" style="color:var(--md-mint)">—</div>
+          <div class="kpi-sub">EH/s</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label"><span data-i18n="toolsDifficulty">Сложность</span><span class="material-symbols-rounded">fitness_center</span></div>
+          <div class="kpi-value" id="toolsKpiDiff" style="color:var(--md-yellow)">—</div>
+          <div class="kpi-sub">T</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label"><span data-i18n="toolsHalving">До халвинга</span><span class="material-symbols-rounded" style="color:var(--md-coral)">hourglass_top</span></div>
+          <div class="kpi-value" id="toolsKpiHalving" style="color:var(--md-coral)">—</div>
+          <div class="kpi-sub" id="toolsKpiHalvingSub">—</div>
+        </div>
+      </div>
+
+      <div class="dash-split tools-split">
+        <div class="dash-panel">
+          <div class="panel-row">
+            <h3 data-i18n="toolsCalcTitle">Калькулятор доходности</h3>
+            <button class="chip" onclick="fillCalculatorFromFleet()">
+              <span class="material-symbols-rounded">insights</span>
+              <span data-i18n="toolsFillFleetBtn">Взять данные парка</span>
+            </button>
+          </div>
+
+          <div class="form-grid">
+            <div class="m3-field">
+              <label data-i18n="calcHashrate">Хешрейт парка, TH/s</label>
+              <input id="calcHashrate" type="number" min="0" step="0.1" value="0" oninput="recalcProfitability()" />
+            </div>
+            <div class="m3-field">
+              <label data-i18n="calcPower">Потребление, Вт</label>
+              <input id="calcPower" type="number" min="0" step="10" value="0" oninput="recalcProfitability()" />
+            </div>
+            <div class="m3-field">
+              <label data-i18n="calcTariff">Электричество, $/кВт·ч</label>
+              <input id="calcTariff" type="number" min="0" step="0.001" value="0.05" oninput="recalcProfitability()" />
+            </div>
+            <div class="m3-field">
+              <label data-i18n="calcPoolFee">Комиссия пула, %</label>
+              <input id="calcPoolFee" type="number" min="0" max="100" step="0.1" value="1" oninput="recalcProfitability()" />
+            </div>
+            <div class="m3-field">
+              <label data-i18n="calcBtcPrice">Курс BTC, $</label>
+              <input id="calcBtcPrice" type="number" min="0" step="100" value="100000" oninput="recalcProfitability()" />
+            </div>
+            <div class="m3-field">
+              <label data-i18n="calcNetworkHash">Хешрейт сети, EH/s</label>
+              <input id="calcNetworkHash" type="number" min="1" step="10" value="1000" oninput="recalcProfitability()" />
+            </div>
+          </div>
+
+          <div class="calc-grid">
+            <div class="calc-tile"><div class="label" data-i18n="calcBtcPerDay">Добыча BTC / день</div><div class="value" id="calcBtcDay">—</div></div>
+            <div class="calc-tile"><div class="label" data-i18n="calcRevenueDay">Доход / день</div><div class="value" id="calcRevenueDay">—</div></div>
+            <div class="calc-tile"><div class="label" data-i18n="calcPowerCostDay">Электричество / день</div><div class="value" id="calcCostDay">—</div></div>
+            <div class="calc-tile"><div class="label" data-i18n="calcProfitDay">Прибыль / день</div><div class="value" id="calcProfitDay">—</div></div>
+            <div class="calc-tile"><div class="label" data-i18n="calcProfitMonth">Прибыль / месяц</div><div class="value" id="calcProfitMonth">—</div></div>
+            <div class="calc-tile"><div class="label" data-i18n="calcMargin">Маржа</div><div class="value" id="calcMargin">—</div></div>
+            <div class="calc-tile"><div class="label" data-i18n="calcBreakEven">Безубыточный курс BTC</div><div class="value" id="calcBreakEven">—</div></div>
+          </div>
+
+          <p class="field-hint" data-i18n="toolsCalcHint">Расчёт ориентировочный: доходность зависит от сложности сети, комиссии пула и курса BTC.</p>
+        </div>
+
+        <div class="dash-panel">
+          <div class="panel-row">
+            <h3 data-i18n="toolsNetworkTitle">Сеть Bitcoin</h3>
+            <button class="chip" onclick="loadBtcNetworkStats(true)">
+              <span class="material-symbols-rounded">refresh</span>
+              <span data-i18n="toolsRefreshBtn">Обновить данные</span>
+            </button>
+          </div>
+          <div id="netStatsList"></div>
+          <p id="toolsUpdated" class="field-hint"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ЭКРАН 4: НАСТРОЙКИ -->
     <section id="screen-settings" class="screen-view">
       <div class="dash-panel" style="max-width:820px">
         <h3 data-i18n="settingsNetworkTitle">Параметры сканирования и сети</h3>
@@ -397,7 +491,12 @@
           <label data-i18n="customSuffixLabel">Кастомный суффикс</label>
           <input id="customSuffixInput" type="text" placeholder="rack01" />
         </div>
+        <div class="m3-field">
+          <label data-i18n="poolDifficultyLabel">Сложность пула (diff, опционально)</label>
+          <input id="poolDifficulty" type="number" min="0" step="1" placeholder="auto" />
+        </div>
       </div>
+      <p class="field-hint" data-i18n="poolDifficultyHint">Пусто или 0 — автоматическая сложность пула</p>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:22px;flex-wrap:wrap">
         <button class="chip" onclick="closePoolsModal()" data-i18n="cancelBtn">Отмена</button>
         <button class="chip active" onclick="submitBatchPools(false)" data-i18n="configSelectedBtn">Применить к выбранным</button>
@@ -412,7 +511,7 @@
       <h3 data-i18n="powerModalTitle">Управление питанием и частотами (Power Control)</h3>
       <div class="m3-field">
         <label data-i18n="powerModelLabel">Семейство моделей</label>
-        <select id="powerModelSelect">
+        <select id="powerModelSelect" onchange="syncPowerFreqPreset()">
           <option value="Antminer S21 / T21 / S19">Antminer S21 / T21 / S19 Series</option>
           <option value="Antminer S9 / T9 Legacy">Antminer S9 / T9 Legacy</option>
           <option value="WhatsMiner M50 / M60">WhatsMiner M50 / M60 Series</option>
@@ -421,7 +520,7 @@
       </div>
       <div class="m3-field">
         <label data-i18n="powerOptionLabel">Режим работы (прошивка)</label>
-        <select id="powerOptionSelect">
+        <select id="powerOptionSelect" onchange="syncPowerFreqPreset()">
           <option value="normal" data-i18n="modeNormal">Normal (Штатный режим)</option>
           <option value="lpm" data-i18n="modeLpm">LPM (Низкое энергопотребление)</option>
           <option value="elpm" data-i18n="modeElpm">Enhanced LPM (Глубокое энергосбережение)</option>
@@ -430,6 +529,21 @@
           <option value="sleep" data-i18n="modeSleep">Sleep (Спящий режим)</option>
         </select>
       </div>
+      <label class="switch-row">
+        <input id="powerCustomFreqChk" type="checkbox" onchange="toggleCustomFreqFields()" />
+        <span data-i18n="powerCustomFreqToggle">Задать частоту вручную (MHz)</span>
+      </label>
+      <div id="powerFreqFields" class="form-grid" style="display:none">
+        <div class="m3-field">
+          <label data-i18n="powerFreqLabel">Частота чипов, MHz</label>
+          <input id="powerFreqInput" type="number" min="100" max="1500" step="5" value="675" />
+        </div>
+        <div class="m3-field">
+          <label data-i18n="powerVoltageLabel">Напряжение, V (опционально)</label>
+          <input id="powerVoltageInput" type="number" min="0" max="20" step="0.1" placeholder="auto" />
+        </div>
+      </div>
+      <p class="field-hint" data-i18n="powerFreqHint">Точная частота поддерживается кастомными прошивками (Vnish, Braiins OS+) и WhatsMiner.</p>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:22px">
         <button class="chip" onclick="closePowerModal()" data-i18n="cancelBtn">Отмена</button>
         <button class="chip active" onclick="submitPowerControl(false)" data-i18n="configSelectedBtn">Применить к выбранным</button>
@@ -512,6 +626,10 @@
   <div id="importModal" class="dialog-backdrop">
     <div class="m3-dialog">
       <h3 data-i18n="importModalTitle">Импорт списка IP или диапазонов (CSV / Текст)</h3>
+      <div class="m3-field">
+        <label data-i18n="importFileLabel">Загрузить файл CSV / TXT</label>
+        <input id="importFileInput" type="file" accept=".csv,.txt,text/plain,text/csv" onchange="loadImportFile(this)" />
+      </div>
       <div class="m3-field">
         <label data-i18n="importModalHint">Вставьте по одному диапазону или IP на строку (формат: 192.168.1.1-254,Стойка 1)</label>
         <textarea id="importTextarea" rows="6" class="mono" placeholder="192.168.1.1-254,Rack 1&#10;192.168.2.1-254,Rack 2"></textarea>
