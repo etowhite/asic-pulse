@@ -326,7 +326,7 @@ Use the **Demo Rig / Live Network** control in the top bar to switch modes. Swit
 
 ### Getting started
 
-1. Download the executable from the [Releases](https://github.com/etowhite/asic-pulse-m3/releases) page.
+1. Download the executable from the [Releases](https://github.com/etowhite/asic-pulse/releases) page.
 2. Run it. Because the build is unsigned, confirm the SHA-256 hash if Windows shows a warning.
 3. Explore the demo fleet first; no miners are contacted in demo mode.
 4. Switch the top-bar control from **Demo Rig** to **Live Network**.
@@ -346,8 +346,8 @@ Prerequisites:
 - Git.
 
 ```powershell
-git clone https://github.com/etowhite/asic-pulse-m3.git
-cd asic-pulse-m3
+git clone https://github.com/etowhite/asic-pulse.git
+cd asic-pulse
 cd src-tauri
 cargo build --release
 ```
@@ -414,7 +414,7 @@ Open `http://127.0.0.1:8765/`. The browser build uses demo data and browser fall
 
 ### Feedback
 
-Use the [issue tracker](https://github.com/etowhite/asic-pulse-m3/issues) for bug reports and feature requests. Include the miner model, firmware string, network layout, steps to reproduce, and relevant log lines. Remove credentials, pool passwords, wallet addresses, and other sensitive data before posting.
+Use the [issue tracker](https://github.com/etowhite/asic-pulse/issues) for bug reports and feature requests. Include the miner model, firmware string, network layout, steps to reproduce, and relevant log lines. Remove credentials, pool passwords, wallet addresses, and other sensitive data before posting.
 
 ASIC Pulse is an independent desktop project. The source code is published in this repository.
 
@@ -740,7 +740,7 @@ API производителей различаются в зависимост�
 
 ### Первый запуск
 
-1. Скачайте исполняемый файл со страницы [Releases](https://github.com/etowhite/asic-pulse-m3/releases).
+1. Скачайте исполняемый файл со страницы [Releases](https://github.com/etowhite/asic-pulse/releases).
 2. Запустите его. Сборка не подписана, поэтому при предупреждении Windows сверьте хеш SHA-256.
 3. Сначала изучите демонстрационный парк: в демо-режиме майнеры не опрашиваются.
 4. Переключите верхнюю кнопку с **«Демо-парк»** на **«Реальная сеть»**.
@@ -760,8 +760,8 @@ API производителей различаются в зависимост�
 - Git.
 
 ```powershell
-git clone https://github.com/etowhite/asic-pulse-m3.git
-cd asic-pulse-m3
+git clone https://github.com/etowhite/asic-pulse.git
+cd asic-pulse
 cd src-tauri
 cargo build --release
 ```
@@ -828,6 +828,6 @@ python -m http.server 8765
 
 ### Обратная связь
 
-Для сообщений об ошибках и предложений используйте [issue tracker](https://github.com/etowhite/asic-pulse-m3/issues). Укажите модель майнера, строку прошивки, схему сети, шаги воспроизведения и относящиеся к делу строки журнала. Перед публикацией удалите логины, пароли пулов, адреса кошельков и другие чувствительные данные.
+Для сообщений об ошибках и предложений используйте [issue tracker](https://github.com/etowhite/asic-pulse/issues). Укажите модель майнера, строку прошивки, схему сети, шаги воспроизведения и относящиеся к делу строки журнала. Перед публикацией удалите логины, пароли пулов, адреса кошельков и другие чувствительные данные.
 
 ASIC Pulse — самостоятельный настольный проект. Исходный код опубликован в этом репозитории.
